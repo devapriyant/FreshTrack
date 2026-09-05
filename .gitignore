@@ -1,0 +1,98 @@
+# Environment variables and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+*.env
+**/*.env
+
+# Allow sanitized templates
+!.env.example
+!**/.env.example
+
+# Credentials, certificates and private keys
+**/local.properties
+**/key.properties
+*.jks
+*.keystore
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+service-account*.json
+
+# Node.js
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Keep these files tracked
+!**/package.json
+!**/package-lock.json
+
+# Flutter and Dart
+.dart_tool/
+.pub-cache/
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
+# Build output
+build/
+**/build/
+coverage/
+**/coverage/
+
+# Flutter symbolication and obfuscation
+**/doc/api/
+**/ios/Flutter/.last_build_id
+app.*.symbols
+app.*.map.json
+
+# Android
+android/.gradle/
+android/local.properties
+android/key.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+
+# iOS and macOS generated dependencies
+ios/Pods/
+macos/Pods/
+ios/.symlinks/
+macos/.symlinks/
+
+# Logs and temporary files
+*.log
+*.buildlog
+*.tmp
+*.temp
+*.swp
+.build/
+.buildlog/
+migrate_working_dir/
+
+
+# IDE and editor files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.atom/
+.history/
+
+# Operating system and miscellaneous files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.class
+*.pyc
+__pycache__/
+.svn/
+.swiftpm/
