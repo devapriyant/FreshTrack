@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../../core/auth/session_expiry_coordinator.dart';
 import '../../../core/config/api_config.dart';
 import '../../../core/errors/exceptions.dart';
 import '../../auth/data/auth_repository.dart';
@@ -29,12 +30,16 @@ abstract class FoodRepository {
 
 class NodeFoodRepository implements FoodRepository {
   final AuthRepository authRepository;
+  final SessionExpiryCoordinator sessionExpiryCoordinator;
   final http.Client _httpClient;
   final bool _isClientOwned;
 
-  NodeFoodRepository({required this.authRepository, http.Client? httpClient})
-    : _httpClient = httpClient ?? http.Client(),
-      _isClientOwned = httpClient == null;
+  NodeFoodRepository({
+    required this.authRepository,
+    required this.sessionExpiryCoordinator,
+    http.Client? httpClient,
+  }) : _httpClient = httpClient ?? http.Client(),
+       _isClientOwned = httpClient == null;
 
   @override
   void dispose() {
@@ -46,6 +51,7 @@ class NodeFoodRepository implements FoodRepository {
   Future<Map<String, String>> _getHeaders() async {
     final token = await authRepository.getToken();
     if (token == null || token.isEmpty) {
+      await sessionExpiryCoordinator.expireSession();
       throw AuthException(
         'Authentication token required. Please log in.',
         '401',
@@ -75,8 +81,8 @@ class NodeFoodRepository implements FoodRepository {
       case 400:
         throw ValidationException(message, '400');
       case 401:
-        // Clear auth session so AuthGate redirects, then throw
-        await authRepository.signOut();
+        // Authoritatively clear session and advance epoch via coordinator
+        await sessionExpiryCoordinator.expireSession();
         throw AuthException(message, '401');
       case 404:
         throw NotFoundException(message, '404');

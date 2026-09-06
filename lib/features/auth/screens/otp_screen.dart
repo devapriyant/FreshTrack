@@ -108,7 +108,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     if (_expirySeconds <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('This verification code has expired. Please request a new code.'),
+          content: Text(
+            'This verification code has expired. Please request a new code.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -138,10 +140,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
           Navigator.of(context).popUntil((route) => route.isFirst);
         }
       } else if (widget.purpose == OtpPurpose.login) {
-        await repo.verifyLoginOtp(
-          challengeId: _currentChallengeId,
-          otp: otp,
-        );
+        await repo.verifyLoginOtp(challengeId: _currentChallengeId, otp: otp);
 
         // Notify session controller to initialize fresh state and invalidate any old cached data
         ref.read(authSessionControllerProvider.notifier).onSessionStarted();
@@ -164,9 +163,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                'Email verified successfully! You can now log in.',
-              ),
+              content: Text('Email verified successfully! You can now log in.'),
               backgroundColor: Colors.green,
             ),
           );
@@ -262,8 +259,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
     if (widget.purpose == OtpPurpose.login) {
       title = 'Login Verification';
-      description =
-          'Enter the 6-digit security code sent to:\n${widget.email}';
+      description = 'Enter the 6-digit security code sent to:\n${widget.email}';
     } else if (widget.purpose == OtpPurpose.verifyEmail) {
       title = 'Verify Existing Account';
       description =

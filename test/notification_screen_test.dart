@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:freshtrack/features/auth/data/auth_repository.dart';
+import 'package:freshtrack/features/auth/models/user_profile.dart';
 import 'package:freshtrack/features/notifications/data/notification_repository.dart';
 import 'package:freshtrack/features/notifications/models/app_notification.dart';
 import 'package:freshtrack/features/notifications/models/notification_preferences.dart';
@@ -102,9 +104,19 @@ void main() {
         ],
       );
 
+      final mockUser = UserProfile(
+        id: '1',
+        userId: '1',
+        fullName: 'Test User',
+        email: 'test@example.com',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      );
+
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            userProfileProvider.overrideWith((ref) async => mockUser),
             notificationRepositoryProvider.overrideWithValue(mockRepo),
             enableForegroundCoordinatorProvider.overrideWith((ref) => false),
           ],

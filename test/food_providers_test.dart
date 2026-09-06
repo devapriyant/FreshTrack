@@ -139,16 +139,18 @@ void main() {
       container = ProviderContainer(
         overrides: [
           foodRepositoryProvider.overrideWithValue(stubRepo),
-          userProfileProvider.overrideWith((ref) => Future.value(
-                UserProfile(
-                  id: '1',
-                  userId: '1',
-                  fullName: 'Test User',
-                  email: 'test@example.com',
-                  createdAt: DateTime.now(),
-                  updatedAt: DateTime.now(),
-                ),
-              )),
+          userProfileProvider.overrideWith(
+            (ref) => Future.value(
+              UserProfile(
+                id: '1',
+                userId: '1',
+                fullName: 'Test User',
+                email: 'test@example.com',
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+              ),
+            ),
+          ),
         ],
       );
     });

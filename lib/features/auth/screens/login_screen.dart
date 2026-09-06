@@ -37,10 +37,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      final challenge = await repo.signIn(
-        email: email,
-        password: password,
-      );
+      final challenge = await repo.signIn(email: email, password: password);
 
       if (mounted) {
         Navigator.of(context).push(
@@ -96,8 +93,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content:
-                                Text('Failed to start verification: $startErr'),
+                            content: Text(
+                              'Failed to start verification: $startErr',
+                            ),
                             backgroundColor: Colors.red,
                           ),
                         );

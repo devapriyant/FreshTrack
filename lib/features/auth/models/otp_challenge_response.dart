@@ -21,7 +21,8 @@ class OtpChallengeResponse {
       maskedEmail: json['email']?.toString() ?? '',
       expiresInSeconds: json['expires_in_seconds'] is int
           ? json['expires_in_seconds'] as int
-          : int.tryParse(json['expires_in_seconds']?.toString() ?? '600') ?? 600,
+          : int.tryParse(json['expires_in_seconds']?.toString() ?? '600') ??
+                600,
       message: json['message']?.toString() ?? 'Verification code sent.',
       verificationRequired: json['verification_required'] == true,
     );

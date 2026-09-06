@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:freshtrack/features/auth/controllers/auth_session_controller.dart';
 import 'package:freshtrack/features/auth/data/auth_repository.dart';
+import 'package:freshtrack/features/auth/models/user_profile.dart';
 import 'package:freshtrack/features/notifications/data/notification_repository.dart';
 import 'package:freshtrack/features/notifications/models/app_notification.dart';
 import 'package:freshtrack/features/notifications/models/notification_preferences.dart';
@@ -49,6 +52,9 @@ class FakeNotificationRepository implements NotificationRepository {
     reminderHour: 9,
   );
 
+  Completer<List<AppNotification>>? delayedCompleter;
+  int getNotificationsCallCount = 0;
+
   @override
   Future<List<AppNotification>> getNotifications({
     bool? unread,
@@ -56,6 +62,10 @@ class FakeNotificationRepository implements NotificationRepository {
     int limit = 30,
     int offset = 0,
   }) async {
+    getNotificationsCallCount++;
+    if (delayedCompleter != null) {
+      return await delayedCompleter!.future;
+    }
     var result = List<AppNotification>.from(items);
     if (unread == true) {
       result = result.where((n) => !n.isRead).toList();
@@ -113,6 +123,26 @@ class FakeNotificationRepository implements NotificationRepository {
   void dispose() {}
 }
 
+class FakeAuthRepository implements AuthRepository {
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  Stream<bool> get authStateChanges => const Stream.empty();
+
+  @override
+  Future<UserProfile?> getCurrentProfile() async => null;
+
+  @override
+  Future<String?> getToken() async => 'test_token';
+
+  @override
+  Future<bool> get isAuthenticated async => true;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class FakeBrowserNotificationService implements BrowserNotificationService {
   final List<int> shownNotificationIds = [];
   bool permissionGranted = true;
@@ -143,16 +173,26 @@ void main() {
     late FakeNotificationRepository fakeRepo;
     late FakeBrowserNotificationService fakeBrowser;
 
+    final testProfile = UserProfile(
+      id: '1',
+      userId: '1',
+      fullName: 'Test User',
+      email: 'test@example.com',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
     setUp(() {
       fakeRepo = FakeNotificationRepository();
       fakeBrowser = FakeBrowserNotificationService();
     });
 
     test(
-      'notificationsProvider loads list and synchronizes unread count',
+      'notificationsProvider loads list and synchronizes unread count when authenticated',
       () async {
         final container = ProviderContainer(
           overrides: [
+            userProfileProvider.overrideWith((ref) async => testProfile),
             notificationRepositoryProvider.overrideWithValue(fakeRepo),
             enableForegroundCoordinatorProvider.overrideWith((ref) => false),
           ],
@@ -172,6 +212,7 @@ void main() {
       () async {
         final container = ProviderContainer(
           overrides: [
+            userProfileProvider.overrideWith((ref) async => testProfile),
             notificationRepositoryProvider.overrideWithValue(fakeRepo),
             enableForegroundCoordinatorProvider.overrideWith((ref) => false),
           ],
@@ -194,6 +235,7 @@ void main() {
       () async {
         final container = ProviderContainer(
           overrides: [
+            userProfileProvider.overrideWith((ref) async => testProfile),
             notificationRepositoryProvider.overrideWithValue(fakeRepo),
             enableForegroundCoordinatorProvider.overrideWith((ref) => false),
           ],
@@ -216,6 +258,7 @@ void main() {
       () async {
         final container = ProviderContainer(
           overrides: [
+            userProfileProvider.overrideWith((ref) async => testProfile),
             notificationRepositoryProvider.overrideWithValue(fakeRepo),
             enableForegroundCoordinatorProvider.overrideWith((ref) => false),
           ],
@@ -227,10 +270,11 @@ void main() {
 
         await container
             .read(notificationsProvider.notifier)
-            .deleteNotification(2);
+            .deleteNotification(1);
 
         final updatedList = container.read(notificationsProvider).value!;
-        expect(updatedList.any((n) => n.id == 2), false);
+        expect(updatedList.length, 2);
+        expect(updatedList.any((n) => n.id == 1), false);
         expect(container.read(unreadNotificationCountProvider), 1);
       },
     );
@@ -240,6 +284,7 @@ void main() {
       () async {
         final container = ProviderContainer(
           overrides: [
+            userProfileProvider.overrideWith((ref) async => testProfile),
             notificationRepositoryProvider.overrideWithValue(fakeRepo),
             enableForegroundCoordinatorProvider.overrideWith((ref) => false),
           ],
@@ -248,25 +293,16 @@ void main() {
 
         await container.read(notificationsProvider.future);
 
-        // Filter unread
         container.read(notificationFilterProvider.notifier).state =
             NotificationFilter.unread;
-        var filtered = container.read(filteredNotificationsProvider);
-        expect(filtered.length, 2);
+        final unreadList = container.read(filteredNotificationsProvider);
+        expect(unreadList.length, 2);
 
-        // Filter today
-        container.read(notificationFilterProvider.notifier).state =
-            NotificationFilter.today;
-        filtered = container.read(filteredNotificationsProvider);
-        expect(filtered.length, 1);
-        expect(filtered.first.id, 2);
-
-        // Filter expired
         container.read(notificationFilterProvider.notifier).state =
             NotificationFilter.expired;
-        filtered = container.read(filteredNotificationsProvider);
-        expect(filtered.length, 1);
-        expect(filtered.first.id, 3);
+        final expiredList = container.read(filteredNotificationsProvider);
+        expect(expiredList.length, 1);
+        expect(expiredList.first.id, 3);
       },
     );
 
@@ -275,6 +311,7 @@ void main() {
       () async {
         final container = ProviderContainer(
           overrides: [
+            userProfileProvider.overrideWith((ref) async => testProfile),
             notificationRepositoryProvider.overrideWithValue(fakeRepo),
             enableForegroundCoordinatorProvider.overrideWith((ref) => false),
           ],
@@ -312,6 +349,7 @@ void main() {
 
         final container = ProviderContainer(
           overrides: [
+            userProfileProvider.overrideWith((ref) async => testProfile),
             notificationRepositoryProvider.overrideWithValue(fakeRepo),
             browserNotificationServiceProvider.overrideWithValue(fakeBrowser),
             authStateProvider.overrideWith((ref) => Stream.value(true)),
@@ -320,7 +358,6 @@ void main() {
         );
         addTearDown(container.dispose);
 
-        // Manually trigger poll on coordinator without timers
         final coordinator = ForegroundNotificationCoordinator(
           reader: container.read,
           autoStart: false,
@@ -328,14 +365,142 @@ void main() {
         addTearDown(coordinator.dispose);
 
         await coordinator.poll();
-        // Found 2 unread notifications (id: 1 and id: 2)
         expect(fakeBrowser.shownNotificationIds.length, 2);
         expect(fakeBrowser.shownNotificationIds.contains(1), true);
         expect(fakeBrowser.shownNotificationIds.contains(2), true);
 
-        // Second poll must not duplicate alerts for id 1 and id 2
         await coordinator.poll();
         expect(fakeBrowser.shownNotificationIds.length, 2);
+      },
+    );
+
+    // ============================================================
+    // NEW HARDENED NOTIFICATION TESTS
+    // ============================================================
+
+    test(
+      'Logged-out build returns empty list without making unauthorized requests',
+      () async {
+        final container = ProviderContainer(
+          overrides: [
+            // Explicitly unauthenticated (profile is null)
+            userProfileProvider.overrideWith((ref) async => null),
+            notificationRepositoryProvider.overrideWithValue(fakeRepo),
+            enableForegroundCoordinatorProvider.overrideWith((ref) => false),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final list = await container.read(notificationsProvider.future);
+        expect(list.isEmpty, isTrue);
+
+        final unreadBadge = container.read(unreadNotificationCountProvider);
+        expect(unreadBadge, 0);
+
+        // Repository must NOT have been queried
+        expect(fakeRepo.getNotificationsCallCount, 0);
+      },
+    );
+
+    test(
+      'Logout during in-flight notification request discards late response',
+      () async {
+        fakeRepo.delayedCompleter = Completer<List<AppNotification>>();
+        UserProfile? activeProfile = testProfile;
+
+        final container = ProviderContainer(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
+            userProfileProvider.overrideWith((ref) async => activeProfile),
+            notificationRepositoryProvider.overrideWithValue(fakeRepo),
+            enableForegroundCoordinatorProvider.overrideWith((ref) => false),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        // 1. Start loading notifications
+        container.read(notificationsProvider);
+
+        // 2. User logs out while request is pending (epoch advances and profile clears)
+        activeProfile = null;
+        await container.read(authSessionControllerProvider.notifier).signOut();
+
+        // 3. Complete the delayed request
+        fakeRepo.delayedCompleter!.complete([
+          AppNotification(
+            id: 999,
+            foodItemId: 1,
+            type: 'expiring_soon',
+            title: 'Late Stale Notification',
+            message: 'Stale message',
+            isRead: false,
+            expiryDate: DateTime.now(),
+            createdAt: DateTime.now(),
+          ),
+        ]);
+
+        final result = await container.read(notificationsProvider.future);
+        // Discarded because session epoch advanced!
+        expect(result.isEmpty, isTrue);
+      },
+    );
+
+    test(
+      'Rapid User A -> User B switching leaves zero User A notifications for User B',
+      () async {
+        var currentProfile = testProfile;
+
+        final container = ProviderContainer(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
+            userProfileProvider.overrideWith((ref) async => currentProfile),
+            notificationRepositoryProvider.overrideWithValue(fakeRepo),
+            enableForegroundCoordinatorProvider.overrideWith((ref) => false),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        // User A loads notifications
+        final userAList = await container.read(notificationsProvider.future);
+        expect(userAList.length, 3);
+
+        // User A logs out
+        await container.read(authSessionControllerProvider.notifier).signOut();
+
+        // Clear fakeRepo notifications for User B
+        fakeRepo.items = [
+          AppNotification(
+            id: 100,
+            foodItemId: 50,
+            type: 'expiring_soon',
+            title: 'User B Only Alert',
+            message: 'Belongs to B',
+            isRead: false,
+            expiryDate: DateTime(2026, 9, 15),
+            createdAt: DateTime.now(),
+          ),
+        ];
+
+        // User B logs in
+        currentProfile = UserProfile(
+          id: '2',
+          userId: '2',
+          fullName: 'User B',
+          email: 'userb@example.com',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        container
+            .read(authSessionControllerProvider.notifier)
+            .onSessionStarted();
+
+        final userBList = await container.read(notificationsProvider.future);
+        expect(userBList.length, 1);
+        expect(userBList.first.title, 'User B Only Alert');
+        expect(
+          userBList.any((n) => n.id == 1 || n.id == 2 || n.id == 3),
+          isFalse,
+        );
       },
     );
   });

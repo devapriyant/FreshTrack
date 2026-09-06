@@ -41,9 +41,7 @@ abstract class AuthRepository {
   });
 
   /// Resends the login OTP code
-  Future<OtpChallengeResponse> resendLoginOtp({
-    required String challengeId,
-  });
+  Future<OtpChallengeResponse> resendLoginOtp({required String challengeId});
 
   /// Starts email verification for an existing unverified account
   Future<OtpChallengeResponse> startEmailVerification({
@@ -89,8 +87,8 @@ class NodeAuthRepository implements AuthRepository {
   NodeAuthRepository({
     http.Client? httpClient,
     FlutterSecureStorage? secureStorage,
-  })  : _httpClient = httpClient ?? http.Client(),
-        _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  }) : _httpClient = httpClient ?? http.Client(),
+       _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   @override
   Future<String?> getToken() async {
@@ -318,7 +316,9 @@ class NodeAuthRepository implements AuthRepository {
         final userData = responseData['user'] as Map<String, dynamic>?;
 
         if (token == null || userData == null) {
-          throw AuthException('Invalid server response: missing token or user.');
+          throw AuthException(
+            'Invalid server response: missing token or user.',
+          );
         }
 
         // Store JWT strictly after successful login OTP verification
@@ -519,8 +519,9 @@ class NodeAuthRepository implements AuthRepository {
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData =
-            _decodeResponse(response.body);
+        final Map<String, dynamic> responseData = _decodeResponse(
+          response.body,
+        );
         final userData = responseData['user'] as Map<String, dynamic>?;
         if (userData != null) {
           return UserProfile.fromJson(userData);

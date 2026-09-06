@@ -107,40 +107,50 @@ class MockOtpAuthRepository implements AuthRepository {
   Future<bool> get isAuthenticated async => false;
 
   @override
-  Future<OtpChallengeResponse> signIn({required String email, required String password}) async =>
-      throw UnimplementedError();
+  Future<OtpChallengeResponse> signIn({
+    required String email,
+    required String password,
+  }) async => throw UnimplementedError();
 
   @override
   Future<void> signOut() async {}
 
   @override
-  Future<OtpChallengeResponse> signUp({required String email, required String password, required String fullName}) async =>
-      throw UnimplementedError();
+  Future<OtpChallengeResponse> signUp({
+    required String email,
+    required String password,
+    required String fullName,
+  }) async => throw UnimplementedError();
 
   @override
-  Future<OtpChallengeResponse> startEmailVerification({required String email, required String password}) async =>
-      throw UnimplementedError();
+  Future<OtpChallengeResponse> startEmailVerification({
+    required String email,
+    required String password,
+  }) async => throw UnimplementedError();
 }
 
 void main() {
   group('OtpChallengeResponse Model Tests', () {
-    test('Correctly deserializes JSON payload with string and integer fields', () {
-      final json = {
-        'challenge_id': 'uuid-challenge-123',
-        'email': 'd***@example.com',
-        'expires_in_seconds': 600,
-        'message': 'Verification code sent.',
-        'verification_required': true,
-      };
+    test(
+      'Correctly deserializes JSON payload with string and integer fields',
+      () {
+        final json = {
+          'challenge_id': 'uuid-challenge-123',
+          'email': 'd***@example.com',
+          'expires_in_seconds': 600,
+          'message': 'Verification code sent.',
+          'verification_required': true,
+        };
 
-      final response = OtpChallengeResponse.fromJson(json);
+        final response = OtpChallengeResponse.fromJson(json);
 
-      expect(response.challengeId, 'uuid-challenge-123');
-      expect(response.maskedEmail, 'd***@example.com');
-      expect(response.expiresInSeconds, 600);
-      expect(response.message, 'Verification code sent.');
-      expect(response.verificationRequired, isTrue);
-    });
+        expect(response.challengeId, 'uuid-challenge-123');
+        expect(response.maskedEmail, 'd***@example.com');
+        expect(response.expiresInSeconds, 600);
+        expect(response.message, 'Verification code sent.');
+        expect(response.verificationRequired, isTrue);
+      },
+    );
   });
 
   group('OtpScreen Widget Tests', () {
@@ -152,34 +162,35 @@ void main() {
 
     Widget createTestApp(Widget home) {
       return ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(mockAuth),
-        ],
-        child: MaterialApp(
-          home: home,
-        ),
+        overrides: [authRepositoryProvider.overrideWithValue(mockAuth)],
+        child: MaterialApp(home: home),
       );
     }
 
-    testWidgets('Renders registration OTP UI with masked email and 6-digit boxes', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          const OtpScreen(
-            challengeId: 'reg-challenge-1',
-            email: 'u***@example.com',
-            purpose: OtpPurpose.register,
-            expiresInSeconds: 600,
+    testWidgets(
+      'Renders registration OTP UI with masked email and 6-digit boxes',
+      (tester) async {
+        await tester.pumpWidget(
+          createTestApp(
+            const OtpScreen(
+              challengeId: 'reg-challenge-1',
+              email: 'u***@example.com',
+              purpose: OtpPurpose.register,
+              expiresInSeconds: 600,
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(find.text('Verify Your Email'), findsOneWidget);
-      expect(find.textContaining('u***@example.com'), findsOneWidget);
-      expect(find.text('Verify & Continue'), findsOneWidget);
-      expect(find.textContaining('Resend in'), findsOneWidget);
-    });
+        expect(find.text('Verify Your Email'), findsOneWidget);
+        expect(find.textContaining('u***@example.com'), findsOneWidget);
+        expect(find.text('Verify & Continue'), findsOneWidget);
+        expect(find.textContaining('Resend in'), findsOneWidget);
+      },
+    );
 
-    testWidgets('Submitting 6-digit OTP calls verifyRegistrationOtp', (tester) async {
+    testWidgets('Submitting 6-digit OTP calls verifyRegistrationOtp', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         createTestApp(
           const OtpScreen(
@@ -202,27 +213,30 @@ void main() {
       expect(mockAuth.verifiedRegOtp, '123456');
     });
 
-    testWidgets('Submitting login OTP calls verifyLoginOtp and session controller', (tester) async {
-      await tester.pumpWidget(
-        createTestApp(
-          const OtpScreen(
-            challengeId: 'login-challenge-1',
-            email: 'u***@example.com',
-            purpose: OtpPurpose.login,
-            expiresInSeconds: 600,
+    testWidgets(
+      'Submitting login OTP calls verifyLoginOtp and session controller',
+      (tester) async {
+        await tester.pumpWidget(
+          createTestApp(
+            const OtpScreen(
+              challengeId: 'login-challenge-1',
+              email: 'u***@example.com',
+              purpose: OtpPurpose.login,
+              expiresInSeconds: 600,
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(find.text('Login Verification'), findsOneWidget);
+        expect(find.text('Login Verification'), findsOneWidget);
 
-      final textField = find.byType(TextField);
-      await tester.enterText(textField, '654321');
-      await tester.pumpAndSettle();
+        final textField = find.byType(TextField);
+        await tester.enterText(textField, '654321');
+        await tester.pumpAndSettle();
 
-      expect(mockAuth.verifiedLoginChallenge, 'login-challenge-1');
-      expect(mockAuth.verifiedLoginOtp, '654321');
-    });
+        expect(mockAuth.verifiedLoginChallenge, 'login-challenge-1');
+        expect(mockAuth.verifiedLoginOtp, '654321');
+      },
+    );
 
     testWidgets('Short OTP displays validation snackbar', (tester) async {
       await tester.pumpWidget(
@@ -241,7 +255,10 @@ void main() {
       await tester.tap(find.text('Verify & Continue'));
       await tester.pump();
 
-      expect(find.text('Please enter a complete 6-digit OTP code.'), findsOneWidget);
+      expect(
+        find.text('Please enter a complete 6-digit OTP code.'),
+        findsOneWidget,
+      );
     });
   });
 }

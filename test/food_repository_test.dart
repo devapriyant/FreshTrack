@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:freshtrack/core/auth/session_expiry_coordinator.dart';
 import 'package:freshtrack/core/errors/exceptions.dart';
 import 'package:freshtrack/features/auth/data/auth_repository.dart';
 import 'package:freshtrack/features/auth/models/user_profile.dart';
 import 'package:freshtrack/features/food/data/food_repository.dart';
-
 import 'package:freshtrack/features/auth/models/otp_challenge_response.dart';
 
 // Fake AuthRepository for testing
@@ -99,12 +99,25 @@ class FakeAuthRepository implements AuthRepository {
   }
 }
 
+class FakeSessionExpiryCoordinator implements SessionExpiryCoordinator {
+  bool expireSessionCalled = false;
+  int expireSessionCallCount = 0;
+
+  @override
+  Future<void> expireSession() async {
+    expireSessionCalled = true;
+    expireSessionCallCount++;
+  }
+}
+
 void main() {
   group('NodeFoodRepository Tests', () {
     late FakeAuthRepository fakeAuth;
+    late FakeSessionExpiryCoordinator fakeCoordinator;
 
     setUp(() {
       fakeAuth = FakeAuthRepository();
+      fakeCoordinator = FakeSessionExpiryCoordinator();
     });
 
     test(
@@ -137,6 +150,7 @@ void main() {
 
         final repo = NodeFoodRepository(
           authRepository: fakeAuth,
+          sessionExpiryCoordinator: fakeCoordinator,
           httpClient: mockClient,
         );
 
@@ -158,6 +172,7 @@ void main() {
 
       final repo = NodeFoodRepository(
         authRepository: fakeAuth,
+        sessionExpiryCoordinator: fakeCoordinator,
         httpClient: mockClient,
       );
 
@@ -195,6 +210,7 @@ void main() {
 
         final repo = NodeFoodRepository(
           authRepository: fakeAuth,
+          sessionExpiryCoordinator: fakeCoordinator,
           httpClient: mockClient,
         );
 
@@ -233,6 +249,7 @@ void main() {
 
       final repo = NodeFoodRepository(
         authRepository: fakeAuth,
+        sessionExpiryCoordinator: fakeCoordinator,
         httpClient: mockClient,
       );
 
@@ -250,6 +267,7 @@ void main() {
 
       final repo = NodeFoodRepository(
         authRepository: fakeAuth,
+        sessionExpiryCoordinator: fakeCoordinator,
         httpClient: mockClient,
       );
 
@@ -266,7 +284,7 @@ void main() {
     });
 
     test(
-      'HTTP 401 calls authRepository.signOut() and throws AuthException',
+      'HTTP 401 calls sessionExpiryCoordinator.expireSession() and throws AuthException',
       () async {
         final mockClient = MockClient((request) async {
           return http.Response(
@@ -277,17 +295,19 @@ void main() {
 
         final repo = NodeFoodRepository(
           authRepository: fakeAuth,
+          sessionExpiryCoordinator: fakeCoordinator,
           httpClient: mockClient,
         );
 
-        expect(fakeAuth.signOutCalled, isFalse);
+        expect(fakeCoordinator.expireSessionCalled, isFalse);
 
         await expectLater(
           () => repo.getFoods(),
           throwsA(isA<AuthException>().having((e) => e.code, 'code', '401')),
         );
 
-        expect(fakeAuth.signOutCalled, isTrue);
+        expect(fakeCoordinator.expireSessionCalled, isTrue);
+        expect(fakeCoordinator.expireSessionCallCount, 1);
       },
     );
 
@@ -301,6 +321,7 @@ void main() {
 
       final repo = NodeFoodRepository(
         authRepository: fakeAuth,
+        sessionExpiryCoordinator: fakeCoordinator,
         httpClient: mockClient,
       );
 
@@ -323,6 +344,7 @@ void main() {
 
       final repo = NodeFoodRepository(
         authRepository: fakeAuth,
+        sessionExpiryCoordinator: fakeCoordinator,
         httpClient: mockClient,
       );
 

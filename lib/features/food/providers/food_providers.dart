@@ -7,7 +7,11 @@ import '../models/food_item.dart';
 // Food Repository Provider
 final foodRepositoryProvider = Provider<FoodRepository>((ref) {
   final authRepo = ref.watch(authRepositoryProvider);
-  final repo = NodeFoodRepository(authRepository: authRepo);
+  final coordinator = ref.watch(sessionExpiryCoordinatorProvider);
+  final repo = NodeFoodRepository(
+    authRepository: authRepo,
+    sessionExpiryCoordinator: coordinator,
+  );
   ref.onDispose(() => repo.dispose());
   return repo;
 });
@@ -65,7 +69,11 @@ class FoodFilterNotifier extends StateNotifier<FoodFilterState> {
 
 final foodFilterProvider =
     StateNotifierProvider<FoodFilterNotifier, FoodFilterState>((ref) {
-      return FoodFilterNotifier();
+      final notifier = FoodFilterNotifier();
+      ref.listen<int>(authSessionEpochProvider, (previous, next) {
+        notifier.reset();
+      });
+      return notifier;
     });
 
 // Complete Food Inventory Notifier bound to active user profile and session epoch

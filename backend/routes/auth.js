@@ -11,7 +11,7 @@ const {
   invalidateChallenge,
   maskEmail,
 } = require("../services/otpService");
-const { sendOtpEmail } = require("../services/emailService");
+const emailService = require("../services/emailService");
 const {
   ipStrictLimiter,
   ipOtpLimiter,
@@ -101,7 +101,7 @@ router.post(
 
       // Dispatch real email via emailService
       try {
-        await sendOtpEmail({
+        await emailService.sendOtpEmail({
           to: normalizedEmail,
           name: trimmedName,
           otp: challenge.plainOtp,
@@ -228,60 +228,169 @@ router.post(
   ipOtpLimiter,
   challengeResendLimiter,
   async (req, res, next) => {
+    const challenge_id = req.body.challenge_id || req.body.challengeId;
+    if (!challenge_id || typeof challenge_id !== "string") {
+      return res.status(400).json({ message: "Challenge ID is required." });
+    }
+
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(challenge_id.trim())) {
+      return res.status(400).json({ message: "Invalid challenge ID format." });
+    }
+
+    const client = await pool.connect();
     try {
-      const { challenge_id } = req.body;
-      if (!challenge_id) {
-        return res.status(400).json({ message: "Challenge ID is required." });
+      await client.query("BEGIN");
+
+      // 1. Lock challenge row and fetch pending registration info
+      const resOld = await client.query(
+        `SELECT eoc.*, pr.name AS pending_name
+         FROM email_otp_challenges eoc
+         LEFT JOIN pending_registrations pr ON eoc.pending_registration_id = pr.id
+         WHERE eoc.id = $1
+         FOR UPDATE OF eoc`,
+        [challenge_id.trim()]
+      );
+
+      if (resOld.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res
+          .status(404)
+          .json({ message: "Verification challenge not found." });
       }
 
-      const newChallenge = await resendOtpChallenge({
-        challengeId: challenge_id,
-        expectedPurpose: "register",
-      });
+      const oldChallenge = resOld.rows[0];
 
-      try {
-        await sendOtpEmail({
-          to: newChallenge.maskedEmail, // masked email placeholder; sendOtpEmail extracts recipient if passed
-          otp: newChallenge.plainOtp,
-          purpose: "register",
+      if (oldChallenge.purpose !== "register") {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ message: "Invalid challenge purpose." });
+      }
+
+      if (oldChallenge.consumed_at !== null) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          message:
+            "This verification code has already been used or superseded.",
         });
-      } catch (err) {
-        // Find recipient email from new challenge record
-        const emailRes = await pool.query(
-          "SELECT email FROM email_otp_challenges WHERE id = $1",
-          [newChallenge.challengeId]
-        );
-        const recipient =
-          emailRes.rows.length > 0 ? emailRes.rows[0].email : null;
+      }
 
-        if (recipient) {
-          try {
-            await sendOtpEmail({
-              to: recipient,
-              otp: newChallenge.plainOtp,
-              purpose: "register",
-            });
-          } catch (deliveryErr) {
-            await invalidateChallenge(newChallenge.challengeId);
-            return res.status(503).json({
-              message:
-                "Email delivery service is currently unavailable. Please try again later.",
-            });
-          }
-        }
+      // Check expiry
+      if (new Date(oldChallenge.expires_at) < new Date()) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          message: "Verification code has expired. Please register again.",
+        });
+      }
+
+      // Check cooldown (default 60s)
+      const cooldownSeconds = parseInt(
+        process.env.OTP_RESEND_COOLDOWN_SECONDS || "60",
+        10
+      );
+      const lastSent = new Date(oldChallenge.last_sent_at).getTime();
+      const elapsedSeconds = Math.floor((Date.now() - lastSent) / 1000);
+
+      if (elapsedSeconds < cooldownSeconds) {
+        const remainingSeconds = cooldownSeconds - elapsedSeconds;
+        await client.query("ROLLBACK");
+        res.setHeader("Retry-After", remainingSeconds);
+        return res.status(429).json({
+          message: `Please wait ${remainingSeconds} second(s) before requesting another code.`,
+          retryAfter: remainingSeconds,
+        });
+      }
+
+      // 2. Prepare new OTP details (without activating in DB yet)
+      const newChallengeId = crypto.randomUUID();
+      const plainOtp = crypto.randomInt(100000, 1000000).toString();
+      const otpHash = await bcrypt.hash(plainOtp, 10);
+      const expiryMinutes = parseInt(
+        process.env.OTP_EXPIRY_MINUTES || "10",
+        10
+      );
+      const recipientEmail = oldChallenge.email;
+      const recipientName = oldChallenge.pending_name || "User";
+
+      // 3. Attempt delivery first before consuming old challenge.
+      // (SMTP and PostgreSQL cannot form one distributed transaction. By attempting
+      // delivery first, an SMTP failure leaves the old challenge completely intact and usable).
+      try {
+        await emailService.sendOtpEmail({
+          to: recipientEmail,
+          name: recipientName,
+          otp: plainOtp,
+          purpose: "register",
+          expiryMinutes,
+        });
+      } catch (deliveryErr) {
+        // SMTP failure: rollback transaction. The old challenge remains untouched and valid!
+        await client.query("ROLLBACK");
+        return res.status(503).json({
+          message:
+            "Email delivery service is currently unavailable. Please try again later.",
+        });
+      }
+
+      // 4. Delivery succeeded! Now atomically consume old challenge and insert replacement challenge.
+      try {
+        await client.query(
+          `UPDATE email_otp_challenges
+           SET consumed_at = NOW()
+           WHERE id = $1`,
+          [oldChallenge.id]
+        );
+
+        await client.query(
+          `INSERT INTO email_otp_challenges (
+             id, user_id, pending_registration_id, email, purpose,
+             otp_hash, expires_at, attempts, max_attempts,
+             consumed_at, created_at, last_sent_at
+           )
+           VALUES (
+             $1, $2, $3, $4, $5,
+             $6, NOW() + ($7 || ' minutes')::INTERVAL, 0, 5,
+             NULL, NOW(), NOW()
+           )`,
+          [
+            newChallengeId,
+            oldChallenge.user_id,
+            oldChallenge.pending_registration_id,
+            recipientEmail,
+            "register",
+            otpHash,
+            expiryMinutes,
+          ]
+        );
+
+        await client.query("COMMIT");
+      } catch (dbErr) {
+        // Post-delivery database failure: rollback so DB remains consistent
+        try {
+          await client.query("ROLLBACK");
+        } catch (_) {}
+        return res.status(503).json({
+          message:
+            "Verification service temporarily unavailable. Please retry in a moment.",
+        });
       }
 
       return res.json({
         message: "A new verification code has been sent to your email.",
-        challenge_id: newChallenge.challengeId,
-        email: newChallenge.maskedEmail,
-        expires_in_seconds: newChallenge.expiresInSeconds,
+        challenge_id: newChallengeId,
+        email: maskEmail(recipientEmail),
+        expires_in_seconds: expiryMinutes * 60,
       });
     } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {}
       if (error.status) {
         return res.status(error.status).json({ message: error.message });
       }
       next(error);
+    } finally {
+      client.release();
     }
   }
 );
@@ -349,7 +458,7 @@ router.post(
 
       // Dispatch login OTP email
       try {
-        await sendOtpEmail({
+        await emailService.sendOtpEmail({
           to: user.email,
           name: user.name,
           otp: challenge.plainOtp,
@@ -502,7 +611,7 @@ router.post(
 
       if (recipient) {
         try {
-          await sendOtpEmail({
+          await emailService.sendOtpEmail({
             to: recipient,
             name: recipientName,
             otp: newChallenge.plainOtp,
@@ -590,7 +699,7 @@ router.post(
 
       // Dispatch email
       try {
-        await sendOtpEmail({
+        await emailService.sendOtpEmail({
           to: user.email,
           name: user.name,
           otp: challenge.plainOtp,
@@ -707,7 +816,7 @@ router.post(
 
       if (recipient) {
         try {
-          await sendOtpEmail({
+          await emailService.sendOtpEmail({
             to: recipient,
             name: recipientName,
             otp: newChallenge.plainOtp,

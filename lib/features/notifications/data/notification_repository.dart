@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../../core/auth/session_expiry_coordinator.dart';
 import '../../../core/config/api_config.dart';
 import '../../../core/errors/exceptions.dart';
 import '../../auth/data/auth_repository.dart';
@@ -34,11 +35,13 @@ abstract class NotificationRepository {
 
 class NodeNotificationRepository implements NotificationRepository {
   final AuthRepository authRepository;
+  final SessionExpiryCoordinator sessionExpiryCoordinator;
   final http.Client _httpClient;
   final bool _isClientOwned;
 
   NodeNotificationRepository({
     required this.authRepository,
+    required this.sessionExpiryCoordinator,
     http.Client? httpClient,
   }) : _httpClient = httpClient ?? http.Client(),
        _isClientOwned = httpClient == null;
@@ -53,6 +56,7 @@ class NodeNotificationRepository implements NotificationRepository {
   Future<Map<String, String>> _getHeaders() async {
     final token = await authRepository.getToken();
     if (token == null || token.isEmpty) {
+      await sessionExpiryCoordinator.expireSession();
       throw AuthException(
         'Authentication token required. Please log in.',
         '401',
@@ -82,8 +86,8 @@ class NodeNotificationRepository implements NotificationRepository {
       case 400:
         throw ValidationException(message, '400');
       case 401:
-        // Clear auth session so AuthGate handles navigation, then throw
-        await authRepository.signOut();
+        // Authoritatively clear session and advance epoch via coordinator
+        await sessionExpiryCoordinator.expireSession();
         throw AuthException(message, '401');
       case 404:
         throw NotFoundException(message, '404');

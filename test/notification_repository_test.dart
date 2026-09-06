@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:freshtrack/core/auth/session_expiry_coordinator.dart';
 import 'package:freshtrack/core/errors/exceptions.dart';
 import 'package:freshtrack/features/auth/data/auth_repository.dart';
 import 'package:freshtrack/features/auth/models/user_profile.dart';
 import 'package:freshtrack/features/notifications/data/notification_repository.dart';
 import 'package:freshtrack/features/notifications/models/notification_preferences.dart';
-
 import 'package:freshtrack/features/auth/models/otp_challenge_response.dart';
 
 class FakeAuthRepository implements AuthRepository {
@@ -99,12 +99,25 @@ class FakeAuthRepository implements AuthRepository {
   }
 }
 
+class FakeSessionExpiryCoordinator implements SessionExpiryCoordinator {
+  bool expireSessionCalled = false;
+  int expireSessionCallCount = 0;
+
+  @override
+  Future<void> expireSession() async {
+    expireSessionCalled = true;
+    expireSessionCallCount++;
+  }
+}
+
 void main() {
   group('NodeNotificationRepository Tests', () {
     late FakeAuthRepository authRepo;
+    late FakeSessionExpiryCoordinator fakeCoordinator;
 
     setUp(() {
       authRepo = FakeAuthRepository();
+      fakeCoordinator = FakeSessionExpiryCoordinator();
     });
 
     test(
@@ -142,6 +155,7 @@ void main() {
 
         final repo = NodeNotificationRepository(
           authRepository: authRepo,
+          sessionExpiryCoordinator: fakeCoordinator,
           httpClient: mockClient,
         );
 
@@ -170,6 +184,7 @@ void main() {
 
       final repo = NodeNotificationRepository(
         authRepository: authRepo,
+        sessionExpiryCoordinator: fakeCoordinator,
         httpClient: mockClient,
       );
 
@@ -204,6 +219,7 @@ void main() {
 
         final repo = NodeNotificationRepository(
           authRepository: authRepo,
+          sessionExpiryCoordinator: fakeCoordinator,
           httpClient: mockClient,
         );
 
@@ -232,6 +248,7 @@ void main() {
 
         final repo = NodeNotificationRepository(
           authRepository: authRepo,
+          sessionExpiryCoordinator: fakeCoordinator,
           httpClient: mockClient,
         );
 
@@ -256,6 +273,7 @@ void main() {
 
       final repo = NodeNotificationRepository(
         authRepository: authRepo,
+        sessionExpiryCoordinator: fakeCoordinator,
         httpClient: mockClient,
       );
 
@@ -284,6 +302,7 @@ void main() {
 
         final repo = NodeNotificationRepository(
           authRepository: authRepo,
+          sessionExpiryCoordinator: fakeCoordinator,
           httpClient: mockClient,
         );
 
@@ -311,6 +330,7 @@ void main() {
 
       final repo = NodeNotificationRepository(
         authRepository: authRepo,
+        sessionExpiryCoordinator: fakeCoordinator,
         httpClient: mockClient,
       );
 
@@ -318,7 +338,7 @@ void main() {
     });
 
     test(
-      'HTTP 401 calls authRepository.signOut() and throws AuthException',
+      'HTTP 401 calls sessionExpiryCoordinator.expireSession() and throws AuthException',
       () async {
         final mockClient = MockClient((request) async {
           return http.Response(jsonEncode({'message': 'Invalid token.'}), 401);
@@ -326,13 +346,19 @@ void main() {
 
         final repo = NodeNotificationRepository(
           authRepository: authRepo,
+          sessionExpiryCoordinator: fakeCoordinator,
           httpClient: mockClient,
         );
 
-        expect(() => repo.getUnreadCount(), throwsA(isA<AuthException>()));
-        // Let microtasks run
-        await Future.delayed(Duration.zero);
-        expect(authRepo.signOutCalled, true);
+        expect(fakeCoordinator.expireSessionCalled, false);
+
+        await expectLater(
+          () => repo.getUnreadCount(),
+          throwsA(isA<AuthException>()),
+        );
+
+        expect(fakeCoordinator.expireSessionCalled, true);
+        expect(fakeCoordinator.expireSessionCallCount, 1);
       },
     );
 
@@ -346,6 +372,7 @@ void main() {
 
       final repo = NodeNotificationRepository(
         authRepository: authRepo,
+        sessionExpiryCoordinator: fakeCoordinator,
         httpClient: mockClient,
       );
 
@@ -362,6 +389,7 @@ void main() {
 
       final repo = NodeNotificationRepository(
         authRepository: authRepo,
+        sessionExpiryCoordinator: fakeCoordinator,
         httpClient: mockClient,
       );
 

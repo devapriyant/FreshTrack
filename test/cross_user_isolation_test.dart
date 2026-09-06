@@ -28,7 +28,8 @@ class MockIsolatedAuthRepository implements AuthRepository {
   Future<UserProfile?> getCurrentProfile() async => _currentProfile;
 
   @override
-  Future<String?> getToken() async => _currentProfile != null ? 'test_token' : null;
+  Future<String?> getToken() async =>
+      _currentProfile != null ? 'test_token' : null;
 
   @override
   Future<bool> get isAuthenticated async => _currentProfile != null;
@@ -40,7 +41,10 @@ class MockIsolatedAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<OtpChallengeResponse> signIn({required String email, required String password}) async {
+  Future<OtpChallengeResponse> signIn({
+    required String email,
+    required String password,
+  }) async {
     return const OtpChallengeResponse(
       challengeId: 'c-123',
       maskedEmail: 't***@example.com',
@@ -50,7 +54,10 @@ class MockIsolatedAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<UserProfile> verifyLoginOtp({required String challengeId, required String otp}) async {
+  Future<UserProfile> verifyLoginOtp({
+    required String challengeId,
+    required String otp,
+  }) async {
     final user = UserProfile(
       id: '1',
       userId: '1',
@@ -65,7 +72,11 @@ class MockIsolatedAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<OtpChallengeResponse> signUp({required String email, required String password, required String fullName}) async {
+  Future<OtpChallengeResponse> signUp({
+    required String email,
+    required String password,
+    required String fullName,
+  }) async {
     return const OtpChallengeResponse(
       challengeId: 'c-reg',
       maskedEmail: 't***@example.com',
@@ -75,22 +86,37 @@ class MockIsolatedAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> verifyRegistrationOtp({required String challengeId, required String otp}) async {}
+  Future<void> verifyRegistrationOtp({
+    required String challengeId,
+    required String otp,
+  }) async {}
 
   @override
-  Future<OtpChallengeResponse> resendRegistrationOtp({required String challengeId}) async => throw UnimplementedError();
+  Future<OtpChallengeResponse> resendRegistrationOtp({
+    required String challengeId,
+  }) async => throw UnimplementedError();
 
   @override
-  Future<OtpChallengeResponse> resendLoginOtp({required String challengeId}) async => throw UnimplementedError();
+  Future<OtpChallengeResponse> resendLoginOtp({
+    required String challengeId,
+  }) async => throw UnimplementedError();
 
   @override
-  Future<OtpChallengeResponse> startEmailVerification({required String email, required String password}) async => throw UnimplementedError();
+  Future<OtpChallengeResponse> startEmailVerification({
+    required String email,
+    required String password,
+  }) async => throw UnimplementedError();
 
   @override
-  Future<void> verifyEmailVerificationOtp({required String challengeId, required String otp}) async => throw UnimplementedError();
+  Future<void> verifyEmailVerificationOtp({
+    required String challengeId,
+    required String otp,
+  }) async => throw UnimplementedError();
 
   @override
-  Future<OtpChallengeResponse> resendEmailVerificationOtp({required String challengeId}) async => throw UnimplementedError();
+  Future<OtpChallengeResponse> resendEmailVerificationOtp({
+    required String challengeId,
+  }) async => throw UnimplementedError();
 }
 
 class MockIsolatedFoodRepository implements FoodRepository {
@@ -100,7 +126,12 @@ class MockIsolatedFoodRepository implements FoodRepository {
   String? currentUserId;
 
   @override
-  Future<List<FoodItem>> getFoods({String? status, String? category, String? storageLocation, String? search}) async {
+  Future<List<FoodItem>> getFoods({
+    String? status,
+    String? category,
+    String? storageLocation,
+    String? search,
+  }) async {
     if (delayedResponseCompleter != null) {
       return await delayedResponseCompleter!.future;
     }
@@ -135,10 +166,12 @@ class MockIsolatedFoodRepository implements FoodRepository {
   Future<FoodItem> getFood(int id) async => throw UnimplementedError();
 
   @override
-  Future<FoodItem> updateFood(int id, Map<String, dynamic> payload) async => throw UnimplementedError();
+  Future<FoodItem> updateFood(int id, Map<String, dynamic> payload) async =>
+      throw UnimplementedError();
 
   @override
-  Future<FoodItem> updateStatus(int id, String status) async => throw UnimplementedError();
+  Future<FoodItem> updateStatus(int id, String status) async =>
+      throw UnimplementedError();
 }
 
 void main() {
@@ -211,90 +244,181 @@ void main() {
       container.dispose();
     });
 
-    test('User A logs in -> sees private food -> logs out -> User B logs in -> User A data never flashes or leaks', () async {
-      // 1. User A logs in
-      mockFood.currentUserId = '1';
-      mockAuth.setCurrentUser(userAProfile);
+    test(
+      'User A logs in -> sees private food -> logs out -> User B logs in -> User A data never flashes or leaks',
+      () async {
+        // 1. User A logs in
+        mockFood.currentUserId = '1';
+        mockAuth.setCurrentUser(userAProfile);
 
-      // Read food items for User A
-      final userAItems = await container.read(allFoodItemsProvider.future);
-      expect(userAItems.length, 1);
-      expect(userAItems.first.foodName, 'USER_A_PRIVATE_FOOD');
+        // Read food items for User A
+        final userAItems = await container.read(allFoodItemsProvider.future);
+        expect(userAItems.length, 1);
+        expect(userAItems.first.foodName, 'USER_A_PRIVATE_FOOD');
 
-      final statsA = container.read(foodStatsProvider);
-      expect(statsA.totalCount, 1);
-      expect(statsA.activeCount, 1);
+        final statsA = container.read(foodStatsProvider);
+        expect(statsA.totalCount, 1);
+        expect(statsA.activeCount, 1);
 
-      // 2. User A logs out via centralized AuthSessionController
-      await container.read(authSessionControllerProvider.notifier).signOut();
+        // 2. User A logs out via centralized AuthSessionController
+        await container.read(authSessionControllerProvider.notifier).signOut();
 
-      // Immediately verify allFoodItemsProvider returns empty list when unauthenticated
-      final unauthedItems = await container.read(allFoodItemsProvider.future);
-      expect(unauthedItems.isEmpty, isTrue);
+        // Immediately verify allFoodItemsProvider returns empty list when unauthenticated
+        final unauthedItems = await container.read(allFoodItemsProvider.future);
+        expect(unauthedItems.isEmpty, isTrue);
 
-      final unauthedStats = container.read(foodStatsProvider);
-      expect(unauthedStats.totalCount, 0);
+        final unauthedStats = container.read(foodStatsProvider);
+        expect(unauthedStats.totalCount, 0);
 
-      // 3. User B logs in
-      mockFood.currentUserId = '2';
-      mockAuth.setCurrentUser(userBProfile);
-      container.read(authSessionControllerProvider.notifier).onSessionStarted();
+        // 3. User B logs in
+        mockFood.currentUserId = '2';
+        mockAuth.setCurrentUser(userBProfile);
+        container
+            .read(authSessionControllerProvider.notifier)
+            .onSessionStarted();
 
-      // Read food items for User B
-      final userBItems = await container.read(allFoodItemsProvider.future);
-      expect(userBItems.length, 1);
-      expect(userBItems.first.foodName, 'USER_B_INDEPENDENT_FOOD');
+        // Read food items for User B
+        final userBItems = await container.read(allFoodItemsProvider.future);
+        expect(userBItems.length, 1);
+        expect(userBItems.first.foodName, 'USER_B_INDEPENDENT_FOOD');
 
-      // CRITICAL CHECK: User A's food item is completely absent
-      expect(userBItems.any((item) => item.foodName == 'USER_A_PRIVATE_FOOD'), isFalse);
+        // CRITICAL CHECK: User A's food item is completely absent
+        expect(
+          userBItems.any((item) => item.foodName == 'USER_A_PRIVATE_FOOD'),
+          isFalse,
+        );
 
-      final statsB = container.read(foodStatsProvider);
-      expect(statsB.totalCount, 1);
-      expect(statsB.activeCount, 1);
-    });
+        final statsB = container.read(foodStatsProvider);
+        expect(statsB.totalCount, 1);
+        expect(statsB.activeCount, 1);
+      },
+    );
 
-    test('Session Epoch Guard: late in-flight HTTP responses from earlier session are discarded', () async {
-      // 1. User A starts loading inventory with an artificial delay
-      mockFood.currentUserId = '1';
-      mockAuth.setCurrentUser(userAProfile);
-      mockFood.delayedResponseCompleter = Completer<List<FoodItem>>();
+    test(
+      'Session Epoch Guard: late in-flight HTTP responses from earlier session are discarded',
+      () async {
+        // 1. User A starts loading inventory with an artificial delay
+        mockFood.currentUserId = '1';
+        mockAuth.setCurrentUser(userAProfile);
+        mockFood.delayedResponseCompleter = Completer<List<FoodItem>>();
 
-      // Trigger build() which will wait on the delayed completer
-      final future = container.read(allFoodItemsProvider.future);
+        // Trigger build() which will wait on the delayed completer
+        container.read(allFoodItemsProvider);
 
-      // 2. Before response arrives, User A logs out
-      await container.read(authSessionControllerProvider.notifier).signOut();
+        // 2. Before response arrives, User A logs out
+        await container.read(authSessionControllerProvider.notifier).signOut();
 
-      // 3. Late response for User A arrives now
-      mockFood.delayedResponseCompleter!.complete([
-        FoodItem(
-          id: 999,
-          userId: 1,
-          foodName: 'LATE_USER_A_STALE_FOOD',
-          quantity: 1,
-          expiryDate: DateTime.now().add(const Duration(days: 1)),
-          status: 'active',
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ),
-      ]);
+        // 3. Late response for User A arrives now
+        mockFood.delayedResponseCompleter!.complete([
+          FoodItem(
+            id: 999,
+            userId: 1,
+            foodName: 'LATE_USER_A_STALE_FOOD',
+            quantity: 1,
+            expiryDate: DateTime.now().add(const Duration(days: 1)),
+            status: 'active',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        ]);
 
-      // Await User A's pending call
-      final resultOfDelayedCall = await future;
+        // Read current state of allFoodItemsProvider after late response
+        final resultOfDelayedCall = await container.read(
+          allFoodItemsProvider.future,
+        );
 
-      // Because epoch changed and user logged out, the build guard returned empty list!
-      expect(resultOfDelayedCall.isEmpty, isTrue);
+        // Because epoch changed and user logged out, the build guard returned empty list!
+        expect(resultOfDelayedCall.isEmpty, isTrue);
 
-      // 4. Now User B logs in
-      mockFood.currentUserId = '2';
-      mockAuth.setCurrentUser(userBProfile);
-      container.read(authSessionControllerProvider.notifier).onSessionStarted();
+        // 4. Now User B logs in
+        mockFood.delayedResponseCompleter = null;
+        mockFood.currentUserId = '2';
+        mockAuth.setCurrentUser(userBProfile);
+        container
+            .read(authSessionControllerProvider.notifier)
+            .onSessionStarted();
 
-      mockFood.delayedResponseCompleter = null;
-      final userBItems = await container.read(allFoodItemsProvider.future);
-      expect(userBItems.length, 1);
-      expect(userBItems.first.foodName, 'USER_B_INDEPENDENT_FOOD');
-      expect(userBItems.any((item) => item.foodName == 'LATE_USER_A_STALE_FOOD'), isFalse);
-    });
+        final userBItems = await container.read(allFoodItemsProvider.future);
+        expect(userBItems.length, 1);
+        expect(userBItems.first.foodName, 'USER_B_INDEPENDENT_FOOD');
+        expect(
+          userBItems.any((item) => item.foodName == 'LATE_USER_A_STALE_FOOD'),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'HTTP 401 invokes SessionExpiryCoordinator, advances epoch once, and clears all user-scoped state',
+      () async {
+        // 1. Log in User A
+        mockFood.currentUserId = '1';
+        mockAuth.setCurrentUser(userAProfile);
+
+        final items = await container.read(allFoodItemsProvider.future);
+        expect(items.length, 1);
+        final initialEpoch = container.read(authSessionEpochProvider);
+
+        // 2. Trigger session expiry via coordinator (simulating repository 401)
+        final coordinator = container.read(sessionExpiryCoordinatorProvider);
+        await coordinator.expireSession();
+
+        // Epoch must advance exactly once
+        final newEpoch = container.read(authSessionEpochProvider);
+        expect(newEpoch, initialEpoch + 1);
+
+        // Token and auth state must be unauthenticated
+        expect(await mockAuth.isAuthenticated, isFalse);
+
+        // Food inventory and stats must be cleared
+        final clearedItems = await container.read(allFoodItemsProvider.future);
+        expect(clearedItems.isEmpty, isTrue);
+
+        final clearedStats = container.read(foodStatsProvider);
+        expect(clearedStats.totalCount, 0);
+
+        // Profile must be null
+        final profile = await container.read(userProfileProvider.future);
+        expect(profile, isNull);
+      },
+    );
+
+    test(
+      'Concurrent 401 calls advance session epoch exactly once (deduplication)',
+      () async {
+        mockAuth.setCurrentUser(userAProfile);
+        final initialEpoch = container.read(authSessionEpochProvider);
+        final coordinator = container.read(sessionExpiryCoordinatorProvider);
+
+        // Trigger 5 concurrent 401 expirations simultaneously
+        await Future.wait([
+          coordinator.expireSession(),
+          coordinator.expireSession(),
+          coordinator.expireSession(),
+          coordinator.expireSession(),
+          coordinator.expireSession(),
+        ]);
+
+        final finalEpoch = container.read(authSessionEpochProvider);
+        // Guarded by _isExpiring: advances exactly once!
+        expect(finalEpoch, initialEpoch + 1);
+      },
+    );
+
+    test(
+      'Riverpod container constructs without circular file or provider dependency cycles',
+      () {
+        final freshContainer = ProviderContainer();
+        addTearDown(freshContainer.dispose);
+
+        // Read all key providers across auth, food, and coordinator
+        expect(freshContainer.read(authSessionEpochProvider), 0);
+        expect(
+          freshContainer.read(sessionExpiryCoordinatorProvider),
+          isNotNull,
+        );
+        expect(freshContainer.read(foodFilterProvider), isNotNull);
+      },
+    );
   });
 }

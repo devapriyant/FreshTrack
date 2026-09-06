@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../auth/controllers/auth_session_controller.dart';
 import '../../auth/data/auth_repository.dart';
 import '../data/notification_repository.dart';
 import '../models/app_notification.dart';
@@ -10,7 +11,11 @@ import '../services/browser_notification_service.dart';
 // Notification Repository Provider
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
   final authRepo = ref.watch(authRepositoryProvider);
-  final repo = NodeNotificationRepository(authRepository: authRepo);
+  final coordinator = ref.watch(sessionExpiryCoordinatorProvider);
+  final repo = NodeNotificationRepository(
+    authRepository: authRepo,
+    sessionExpiryCoordinator: coordinator,
+  );
   ref.onDispose(() => repo.dispose());
   return repo;
 });
@@ -31,20 +36,7 @@ final notificationFilterProvider = StateProvider<NotificationFilter>((ref) {
 
 // Unread Notification Count Notifier
 class UnreadNotificationCountNotifier extends StateNotifier<int> {
-  final NotificationRepository _repository;
-
-  UnreadNotificationCountNotifier(this._repository) : super(0) {
-    fetchCount();
-  }
-
-  Future<void> fetchCount() async {
-    try {
-      final count = await _repository.getUnreadCount();
-      state = count;
-    } catch (_) {
-      // Ignored if offline or unauthenticated
-    }
-  }
+  UnreadNotificationCountNotifier() : super(0);
 
   void setCount(int count) => state = count;
 
@@ -57,16 +49,35 @@ class UnreadNotificationCountNotifier extends StateNotifier<int> {
 
 final unreadNotificationCountProvider =
     StateNotifierProvider<UnreadNotificationCountNotifier, int>((ref) {
-      final repo = ref.watch(notificationRepositoryProvider);
-      return UnreadNotificationCountNotifier(repo);
+      final notifier = UnreadNotificationCountNotifier();
+      ref.listen<int>(authSessionEpochProvider, (previous, next) {
+        notifier.reset();
+      });
+      return notifier;
     });
 
 // Notifications List Notifier (Loads all notifications)
 class NotificationsNotifier extends AsyncNotifier<List<AppNotification>> {
   @override
   Future<List<AppNotification>> build() async {
+    final sessionEpoch = ref.watch(authSessionEpochProvider);
+    final profile = await ref.watch(userProfileProvider.future);
+
+    // Return empty list immediately if unauthenticated
+    if (profile == null) {
+      ref.read(unreadNotificationCountProvider.notifier).reset();
+      return const [];
+    }
+
     final repo = ref.watch(notificationRepositoryProvider);
+    final currentEpoch = sessionEpoch;
     final items = await repo.getNotifications();
+
+    // Discard late response if session epoch advanced during fetch
+    if (ref.read(authSessionEpochProvider) != currentEpoch) {
+      return const [];
+    }
+
     // Synchronize unread badge with fetched notifications
     final unread = items.where((n) => !n.isRead).length;
     ref.read(unreadNotificationCountProvider.notifier).setCount(unread);
@@ -74,10 +85,21 @@ class NotificationsNotifier extends AsyncNotifier<List<AppNotification>> {
   }
 
   Future<void> refresh() async {
+    final profile = await ref.read(userProfileProvider.future);
+    if (profile == null) {
+      state = const AsyncValue.data([]);
+      ref.read(unreadNotificationCountProvider.notifier).reset();
+      return;
+    }
+
+    final currentEpoch = ref.read(authSessionEpochProvider);
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       final repo = ref.read(notificationRepositoryProvider);
       final items = await repo.getNotifications();
+      if (ref.read(authSessionEpochProvider) != currentEpoch) {
+        return <AppNotification>[];
+      }
       final unread = items.where((n) => !n.isRead).length;
       ref.read(unreadNotificationCountProvider.notifier).setCount(unread);
       return items;
@@ -184,15 +206,40 @@ class NotificationPreferencesNotifier
     extends AsyncNotifier<NotificationPreferences> {
   @override
   Future<NotificationPreferences> build() async {
+    final sessionEpoch = ref.watch(authSessionEpochProvider);
+    final profile = await ref.watch(userProfileProvider.future);
+
+    if (profile == null) {
+      return const NotificationPreferences();
+    }
+
     final repo = ref.watch(notificationRepositoryProvider);
-    return await repo.getPreferences();
+    final currentEpoch = sessionEpoch;
+    final prefs = await repo.getPreferences();
+
+    if (ref.read(authSessionEpochProvider) != currentEpoch) {
+      return const NotificationPreferences();
+    }
+
+    return prefs;
   }
 
   Future<void> refresh() async {
+    final profile = await ref.read(userProfileProvider.future);
+    if (profile == null) {
+      state = const AsyncValue.data(NotificationPreferences());
+      return;
+    }
+
+    final currentEpoch = ref.read(authSessionEpochProvider);
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       final repo = ref.read(notificationRepositoryProvider);
-      return await repo.getPreferences();
+      final prefs = await repo.getPreferences();
+      if (ref.read(authSessionEpochProvider) != currentEpoch) {
+        return const NotificationPreferences();
+      }
+      return prefs;
     });
   }
 
